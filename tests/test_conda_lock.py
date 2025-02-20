@@ -2176,9 +2176,7 @@ def test_install(
     package = "tzcode"
     platform = "linux-64"
 
-    lock_filename_template = (
-        request.node.name + "conda-{platform}.lock"
-    )
+    lock_filename_template = request.node.name + "conda-{platform}.lock"
     if kind == "env":
         lock_filename = request.node.name + "conda-linux-64.lock.yml"
     elif kind == "explicit":
