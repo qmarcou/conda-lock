@@ -1061,7 +1061,7 @@ def _deprecated_dev_cli(ctx: click.Context, param: click.Parameter, value: Any) 
     if value:
         raise click.BadParameter(
             "--dev-dependencies/--no-dev-dependencies (lock, render) and --dev/--no-dev (install) "
-            "switches are deprecated. Use `--extra dev` instead."
+            "switches are deprecated. Use `--category dev` instead."
         )
     else:
         return value
