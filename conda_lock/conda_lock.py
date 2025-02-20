@@ -1518,6 +1518,7 @@ DEFAULT_INSTALL_OPT_LOCK_FILE = pathlib.Path(DEFAULT_LOCKFILE_NAME)
 )
 @click.option(
     "-E",
+    "-e",
     "--extras",
     "--category",
     multiple=True,
