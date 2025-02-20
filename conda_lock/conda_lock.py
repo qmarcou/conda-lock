@@ -1457,6 +1457,15 @@ DEFAULT_INSTALL_OPT_LOG_LEVEL = "INFO"
 DEFAULT_INSTALL_OPT_LOCK_FILE = pathlib.Path(DEFAULT_LOCKFILE_NAME)
 
 
+def _deprecated_capital_e_callback(
+    ctx: click.Context, param: click.Parameter, value: Any
+) -> Any:
+    """A click callback function raising a deprecation warning for -E."""
+    if "-E" in sys.argv and value:
+        warn("The -E option is deprecated. Use --category or -e instead.")
+    return value
+
+
 @main.command("install", context_settings=CONTEXT_SETTINGS)
 @click.option(
     "--conda",
@@ -1524,6 +1533,7 @@ DEFAULT_INSTALL_OPT_LOCK_FILE = pathlib.Path(DEFAULT_LOCKFILE_NAME)
     multiple=True,
     default=[],
     help="include extra dependencies from the lockfile (where applicable)",
+    callback=_deprecated_capital_e_callback,
 )
 @click.option(
     "--force-platform",
