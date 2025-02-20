@@ -1519,6 +1519,7 @@ DEFAULT_INSTALL_OPT_LOCK_FILE = pathlib.Path(DEFAULT_LOCKFILE_NAME)
 @click.option(
     "-E",
     "--extras",
+    "--category",
     multiple=True,
     default=[],
     help="include extra dependencies from the lockfile (where applicable)",
@@ -1643,6 +1644,7 @@ def install(
 @click.option(
     "-e",
     "--extras",
+    "--category",
     default=[],
     type=str,
     multiple=True,
