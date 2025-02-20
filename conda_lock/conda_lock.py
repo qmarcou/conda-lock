@@ -1057,14 +1057,16 @@ _deprecated_dev_help = (
 
 
 def _deprecated_dev_cli(ctx: click.Context, param: click.Parameter, value: Any) -> Any:
-    """A click callback function raising a deprecation error."""
+    """Raise a deprecation warning and inject `dev` into categories."""
     if value:
-        raise click.BadParameter(
+        warn(
             "--dev-dependencies/--no-dev-dependencies (lock, render) and --dev/--no-dev (install) "
             "switches are deprecated. Use `--category dev` instead."
         )
-    else:
-        return value
+        ctx.params.setdefault("extras", [])
+        if "dev" not in ctx.params["extras"]:
+            ctx.params["extras"].append("dev")
+    return value
 
 
 def handle_no_specified_source_files(
