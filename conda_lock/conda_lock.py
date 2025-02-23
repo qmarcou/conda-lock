@@ -23,6 +23,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    NamedTuple,
     Optional,
     Sequence,
     Set,
@@ -151,6 +152,13 @@ class UnknownLockfileKind(ValueError):
     pass
 
 
+class DevDependenciesDeprecationInfo(NamedTuple):
+    dev_dependencies: Optional[bool]
+    filter_categories: bool
+    original_extras: List[str]
+    override_dev_dependency_deprecation: bool
+
+
 def _extract_platform(line: str) -> Optional[str]:
     search = PLATFORM_PATTERN.search(line)
     if search:
@@ -271,6 +279,7 @@ def make_lock_files(  # noqa: C901
     with_cuda: Optional[str] = None,
     strip_auth: bool = False,
     mapping_url: str,
+    dev_dependencies_deprecation_info: Optional[DevDependenciesDeprecationInfo] = None,
 ) -> None:
     """
     Generate a lock file from the src files provided
@@ -456,6 +465,7 @@ def make_lock_files(  # noqa: C901
             filename_template=filename_template,
             extras=extras,
             check_input_hash=check_input_hash,
+            dev_dependencies_deprecation_info=dev_dependencies_deprecation_info,
         )
 
 
@@ -466,6 +476,7 @@ def do_render(
     extras: Optional[AbstractSet[str]] = None,
     check_input_hash: bool = False,
     override_platform: Optional[Sequence[str]] = None,
+    dev_dependencies_deprecation_info: Optional[DevDependenciesDeprecationInfo] = None,
 ) -> None:
     """Render the lock content for each platform in lockfile
 
@@ -505,6 +516,11 @@ def do_render(
                 )
                 sys.exit(1)
 
+    deprecated_dev_dependencies = handle_dev_dependencies_deprecation(
+        dev_dependencies_deprecation_info,
+        lockfile,
+        filename_template,
+    )
     for plat in platforms:
         for kind in kinds:
             if filename_template:
@@ -515,6 +531,7 @@ def do_render(
                     "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime(
                         "%Y%m%dT%H%M%SZ"
                     ),
+                    "dev-dependencies": str(deprecated_dev_dependencies).lower(),
                 }
 
                 filename = filename_template.format(**context)
@@ -560,6 +577,59 @@ def do_render(
             "makes them useful when updating existing environments.",
             file=sys.stderr,
         )
+
+
+def handle_dev_dependencies_deprecation(
+    dev_dependencies_deprecation_info: Optional[DevDependenciesDeprecationInfo],
+    lockfile: Lockfile,
+    filename_template: Optional[str],
+) -> bool:
+    """Handle the deprecation of the dev-dependencies template variable.
+
+    The return value is the boolean value that should be used for the
+    dev-dependencies template variable.
+
+    It should not be common that dev-dependencies is used as a template variable,
+    so in these cases we can ignore the deprecation.
+
+    The previous behavior was pretty screwy. It was based solely on the value
+    of "--dev-dependencies", which defaulted to True, even if there were no
+    dev dependencies present.
+
+    The desired new behavior is use the presence of dev dependencies in the
+    lockfile to determine the value of the dev-dependencies template variable.
+    """
+    filename_template_depends_on_dev_dependencies = (
+        filename_template is not None and "{dev-dependencies}" in filename_template
+    )
+
+    # Whether or not there are dependencies in the "dev" category.
+    dev_is_a_category = any("dev" in package.categories for package in lockfile.package)
+    new_dev_dependencies = dev_is_a_category
+
+    # The previous behavior.
+    deprecated_dev_dependencies = (
+        True
+        if dev_dependencies_deprecation_info is None
+        or dev_dependencies_deprecation_info.dev_dependencies is None
+        else dev_dependencies_deprecation_info.dev_dependencies
+    )
+
+    # Intervene in the case of an actual discrepancy between the current
+    # behavior and the deprecated behavior.
+    if (
+        filename_template_depends_on_dev_dependencies
+        and deprecated_dev_dependencies != new_dev_dependencies
+        and dev_dependencies_deprecation_info is not None
+    ):
+        if deprecated_dev_dependencies and not new_dev_dependencies:
+            if dev_dependencies_deprecation_info.dev_dependencies is None:
+                _error_msg = (
+                    "There are no dev dependencies present, but the 'dev-dependencies' "
+                    "template variable defaulted to 'true'."
+                )
+                ...
+    return deprecated_dev_dependencies
 
 
 def render_lockfile_for_platform(  # noqa: C901
@@ -1060,14 +1130,11 @@ def _deprecated_dev_cli_callback(
     ctx: click.Context, param: click.Parameter, value: Any
 ) -> Any:
     """Raise a deprecation warning and inject `dev` into categories."""
-    if value:
+    if value is not None:
         warn(
             "--dev-dependencies/--no-dev-dependencies (lock, render) and --dev/--no-dev (install) "
             "switches are deprecated. Use `--category dev` instead."
         )
-        ctx.params.setdefault("extras", [])
-        if "dev" not in ctx.params["extras"]:
-            ctx.params["extras"].append("dev")
     return value
 
 
@@ -1146,6 +1213,7 @@ def run_lock(
     metadata_yamls: Sequence[pathlib.Path] = (),
     strip_auth: bool = False,
     mapping_url: str,
+    dev_dependencies_deprecation_info: Optional[DevDependenciesDeprecationInfo] = None,
 ) -> None:
     if len(environment_files) == 0:
         environment_files = handle_no_specified_source_files(lockfile_path)
@@ -1172,6 +1240,7 @@ def run_lock(
         metadata_yamls=metadata_yamls,
         strip_auth=strip_auth,
         mapping_url=mapping_url,
+        dev_dependencies_deprecation_info=dev_dependencies_deprecation_info,
     )
 
 
@@ -1226,16 +1295,20 @@ CONTEXT_SETTINGS = {"show_default": True, "help_option_names": ["--help", "-h"]}
     help="""Override the channels to use when solving the environment. These will replace the channels as listed in the various source files.""",
 )
 @click.option(
-    "--dev-dependencies",
-    "--no-dev-dependencies",
+    "--dev-dependencies/--no-dev-dependencies",
     "dev_dependencies",
-    is_flag=True,
-    flag_value=True,
-    default=False,
+    default=None,
     help=_deprecated_dev_help,
     hidden=False,
     is_eager=True,
     callback=_deprecated_dev_cli_callback,
+)
+@click.option(
+    "--override-dev-dependency-deprecation",
+    is_flag=True,
+    default=False,
+    help="Restore the deprecated dev dependency behavior.",
+    hidden=True,
 )
 @click.option(
     "-f",
@@ -1372,7 +1445,8 @@ def lock(
     update: Optional[Sequence[str]] = None,
     metadata_choices: Sequence[str] = (),
     metadata_yamls: Sequence[PathLike] = (),
-    dev_dependencies: bool = False,  # DEPRECATED
+    dev_dependencies: Optional[bool] = None,  # DEPRECATED
+    override_dev_dependency_deprecation: bool = False,
 ) -> None:
     """Generate fully reproducible lock files for conda environments.
 
@@ -1417,7 +1491,39 @@ def lock(
     else:
         virtual_package_spec = pathlib.Path(virtual_package_spec)
 
+    dev_dependencies_deprecation_info = DevDependenciesDeprecationInfo(
+        dev_dependencies=dev_dependencies,
+        filter_categories=filter_categories,
+        original_extras=list(extras),
+        override_dev_dependency_deprecation=override_dev_dependency_deprecation,
+    )
+
     extras_ = set(extras)
+    if dev_dependencies is None:
+        extras_.add("dev")
+    elif dev_dependencies is True:
+        extras_.add("dev")
+        warn(
+            "The --dev-dependencies option is deprecated. Instead, please use "
+            "--category dev to include the dev category."
+        )
+    elif dev_dependencies is False:
+        warn(
+            "The --no-dev-dependencies option is deprecated. Instead, please use "
+            "'--filter-categories' to exclude the dev category."
+        )
+        filter_categories = True
+        if "dev" in extras_:
+            error_msg = (
+                "Contradictory options: --no-dev-dependencies and --category=dev or "
+                "--extras=dev have been specified. Please specify only one of these. "
+                "To temporarily override this error for now, use "
+                "--override-dev-dependency-deprecation."
+            )
+            if override_dev_dependency_deprecation:
+                warn(error_msg)
+            else:
+                raise click.UsageError(error_msg)
     lock_func = partial(
         run_lock,
         environment_files=environment_files,
@@ -1437,6 +1543,7 @@ def lock(
         metadata_yamls=[pathlib.Path(path) for path in metadata_yamls],
         strip_auth=strip_auth,
         mapping_url=mapping_url,
+        dev_dependencies_deprecation_info=dev_dependencies_deprecation_info,
     )
     if strip_auth:
         with tempfile.TemporaryDirectory() as tempdir:
