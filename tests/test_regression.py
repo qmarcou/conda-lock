@@ -275,6 +275,7 @@ def test_dev_deps_and_extras_cli_regression(
         "--platform=linux-64",
         "--kind=explicit",
         f"--filename-template={filename_template}",
+        "--override-dev-dependency-deprecation",
     ]
 
     # Add environment files
@@ -298,6 +299,14 @@ def test_dev_deps_and_extras_cli_regression(
         result = runner.invoke(main, args, catch_exceptions=False)
     print(result.stdout, file=sys.stdout)
     print(result.stderr, file=sys.stderr)
+    # contradictory_options = "dev" in extras and dev_deps is False
+    # if contradictory_options:
+    #     assert result.exit_code == 2, "Expected exit code 2 for contradictory options"
+    #     assert (
+    #         "contradictory" in result.stderr.lower()
+    #     ), "Expected error message about contradictory options, got: " + result.stderr
+    #     return
+    # else:
     assert result.exit_code == 0
 
     # Verify exactly one output file was generated
