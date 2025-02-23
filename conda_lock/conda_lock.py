@@ -1056,7 +1056,9 @@ _deprecated_dev_help = (
 )
 
 
-def _deprecated_dev_cli(ctx: click.Context, param: click.Parameter, value: Any) -> Any:
+def _deprecated_dev_cli_callback(
+    ctx: click.Context, param: click.Parameter, value: Any
+) -> Any:
     """Raise a deprecation warning and inject `dev` into categories."""
     if value:
         warn(
@@ -1233,7 +1235,7 @@ CONTEXT_SETTINGS = {"show_default": True, "help_option_names": ["--help", "-h"]}
     help=_deprecated_dev_help,
     hidden=False,
     is_eager=True,
-    callback=_deprecated_dev_cli,
+    callback=_deprecated_dev_cli_callback,
 )
 @click.option(
     "-f",
@@ -1525,7 +1527,7 @@ def _deprecated_capital_e_callback(
     help=_deprecated_dev_help,
     hidden=False,
     is_eager=True,
-    callback=_deprecated_dev_cli,
+    callback=_deprecated_dev_cli_callback,
 )
 @click.option(
     "-E",
@@ -1639,7 +1641,7 @@ def install(
     help=_deprecated_dev_help,
     hidden=False,
     is_eager=True,
-    callback=_deprecated_dev_cli,
+    callback=_deprecated_dev_cli_callback,
 )
 @click.option(
     "-k",
@@ -1757,7 +1759,7 @@ def render(
     help=_deprecated_dev_help,
     hidden=False,
     is_eager=True,
-    callback=_deprecated_dev_cli,
+    callback=_deprecated_dev_cli_callback,
 )
 @click.option(
     "-f",
